@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: group9
+      POSTGRES_PASSWORD: group9_local
+      POSTGRES_DB: group9
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U group9 -d group9"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  test-db:
+    image: postgres:17.6-alpine
+    profiles: ["test"]
+    environment:
+      POSTGRES_USER: group9
+      POSTGRES_PASSWORD: group9_local
+      POSTGRES_DB: group9_test
+    ports: ["127.0.0.1:5433:5432"]
+    tmpfs: ["/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U group9 -d group9_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+volumes:
+  postgres_data:

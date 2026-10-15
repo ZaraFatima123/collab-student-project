@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+.env.test
+.test-postgres*/
+coverage/
+*.log

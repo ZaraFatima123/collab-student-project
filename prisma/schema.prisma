@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Visibility {
+  PRIVATE
+  DISCOVERABLE
+}
+enum ProjectStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+enum Role {
+  OWNER
+  LEAD
+  MEMBER
+}
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  REVOKED
+}
+enum JoinStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  COMPLETED
+}
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model User {
+  id          String @id @default(uuid()) @db.Uuid
+  name        String
+  email       String @unique
+  projects    Project[]
+  memberships ProjectMember[]
+  invitations ProjectInvitation[] @relation("InvitedUser")
+  sentInvites ProjectInvitation[] @relation("InvitedBy")
+  requests    JoinRequest[] @relation("Applicant")
+  reviews     JoinRequest[] @relation("Reviewer")
+  createdTasks Task[] @relation("TaskCreator")
+}
+
+model Project {
+  id          String @id @default(uuid()) @db.Uuid
+  name        String
+  description String @default("")
+  creatorId   String @db.Uuid
+  visibility  Visibility @default(PRIVATE)
+  status      ProjectStatus @default(ACTIVE)
+  startDate   DateTime? @db.Timestamptz(3)
+  dueDate     DateTime? @db.Timestamptz(3)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+  creator     User @relation(fields: [creatorId], references: [id], onDelete: Restrict)
+  members     ProjectMember[]
+  invitations ProjectInvitation[]
+  joinRequests JoinRequest[]
+  tasks       Task[]
+  @@index([visibility, status, createdAt])
+}
+
+model ProjectMember {
+  projectId String @db.Uuid
+  userId    String @db.Uuid
+  role      Role @default(MEMBER)
+  joinedAt  DateTime @default(now()) @db.Timestamptz(3)
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  assignments Task[] @relation("Assignment")
+  @@id([projectId, userId])
+  @@index([userId, joinedAt])
+}
+
+model ProjectInvitation {
+  id            String @id @default(uuid()) @db.Uuid
+  projectId     String @db.Uuid
+  invitedUserId String @db.Uuid
+  invitedById   String @db.Uuid
+  status        InvitationStatus @default(PENDING)
+  expiresAt     DateTime @db.Timestamptz(3)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  respondedAt   DateTime? @db.Timestamptz(3)
+  project       Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invitedUser   User @relation("InvitedUser", fields: [invitedUserId], references: [id], onDelete: Restrict)
+  invitedBy     User @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Restrict)
+  @@index([invitedUserId, createdAt])
+  @@index([projectId, createdAt])
+}
+
+model JoinRequest {
+  id           String @id @default(uuid()) @db.Uuid
+  projectId    String @db.Uuid
+  userId       String @db.Uuid
+  message      String?
+  status       JoinStatus @default(PENDING)
+  reviewedById String? @db.Uuid
+  reviewedAt   DateTime? @db.Timestamptz(3)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  project      Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user         User @relation("Applicant", fields: [userId], references: [id], onDelete: Restrict)
+  reviewedBy   User? @relation("Reviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  @@index([userId, createdAt])
+  @@index([projectId, createdAt])
+}
+
+model Task {
+  id           String @id @default(uuid()) @db.Uuid
+  projectId    String @db.Uuid
+  parentTaskId String? @db.Uuid
+  title        String
+  description  String @default("")
+  status       TaskStatus @default(TODO)
+  priority     Priority @default(MEDIUM)
+  assigneeId   String? @db.Uuid
+  createdById  String @db.Uuid
+  dueDate      DateTime? @db.Timestamptz(3)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+  completedAt  DateTime? @db.Timestamptz(3)
+  project      Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent       Task? @relation("Subtasks", fields: [projectId, parentTaskId], references: [projectId, id], onDelete: NoAction, onUpdate: NoAction)
+  subtasks     Task[] @relation("Subtasks")
+  assignee     ProjectMember? @relation("Assignment", fields: [projectId, assigneeId], references: [projectId, userId], onDelete: NoAction, onUpdate: NoAction)
+  createdBy    User @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  @@unique([projectId, id])
+  @@index([projectId, status, createdAt])
+  @@index([projectId, priority, createdAt])
+  @@index([projectId, assigneeId])
+  @@index([projectId, parentTaskId])
+}
