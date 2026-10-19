@@ -471,6 +471,13 @@
                 "type": "null"
               }
             ]
+          },
+          "completions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskCompletion"
+            },
+            "description": "Immutable completion history. contributorId snapshots the assignee, recordedById records the actor; each transition into COMPLETED adds one event."
           }
         },
         "required": [
@@ -486,6 +493,53 @@
           "dueDate",
           "createdAt",
           "updatedAt",
+          "completedAt",
+          "completions"
+        ]
+      },
+      "TaskCompletion": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "taskId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "contributorId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recordedById": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "taskId",
+          "contributorId",
+          "recordedById",
           "completedAt"
         ]
       },
@@ -5324,7 +5378,8 @@
                     "dueDate": null,
                     "completedAt": null,
                     "createdAt": "2026-10-15T10:00:00.000Z",
-                    "updatedAt": "2026-10-15T10:00:00.000Z"
+                    "updatedAt": "2026-10-15T10:00:00.000Z",
+                    "completions": []
                   }
                 }
               }
@@ -5580,7 +5635,8 @@
                       "dueDate": null,
                       "completedAt": null,
                       "createdAt": "2026-10-15T10:00:00.000Z",
-                      "updatedAt": "2026-10-15T10:00:00.000Z"
+                      "updatedAt": "2026-10-15T10:00:00.000Z",
+                      "completions": []
                     }
                   ],
                   "pagination": {
@@ -5781,7 +5837,8 @@
                     "dueDate": null,
                     "completedAt": null,
                     "createdAt": "2026-10-15T10:00:00.000Z",
-                    "updatedAt": "2026-10-15T10:00:00.000Z"
+                    "updatedAt": "2026-10-15T10:00:00.000Z",
+                    "completions": []
                   }
                 }
               }
@@ -6031,7 +6088,8 @@
                     "dueDate": null,
                     "completedAt": null,
                     "createdAt": "2026-10-15T10:00:00.000Z",
-                    "updatedAt": "2026-10-15T10:00:00.000Z"
+                    "updatedAt": "2026-10-15T10:00:00.000Z",
+                    "completions": []
                   }
                 }
               }
@@ -6257,7 +6315,8 @@
                     "dueDate": null,
                     "completedAt": null,
                     "createdAt": "2026-10-15T10:00:00.000Z",
-                    "updatedAt": "2026-10-15T10:00:00.000Z"
+                    "updatedAt": "2026-10-15T10:00:00.000Z",
+                    "completions": []
                   }
                 }
               }
@@ -6480,7 +6539,8 @@
                     "dueDate": null,
                     "completedAt": null,
                     "createdAt": "2026-10-15T10:00:00.000Z",
-                    "updatedAt": "2026-10-15T10:00:00.000Z"
+                    "updatedAt": "2026-10-15T10:00:00.000Z",
+                    "completions": []
                   }
                 }
               }

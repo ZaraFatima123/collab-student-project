@@ -63,7 +63,8 @@ export class ProjectService {
       if (!leaving && member?.role === 'LEAD' && target.role !== 'MEMBER') fail(403, 'OWNER_REQUIRED', 'LEAD cannot remove another LEAD');
       const unfinished = await tx.task.count({ where: { projectId, assigneeId: targetId, status: { not: 'COMPLETED' } } });
       if (unfinished) fail(409, 'UNFINISHED_ASSIGNMENTS', 'Explicitly reassign or unassign all unfinished tasks before departure');
-      // Completed work remains counted, but its assignment is cleared to preserve the membership FK.
+      // Clear only the current assignment FK. TaskCompletion records retain
+      // historical contributors independently of current project membership.
       const cleared = await tx.task.updateMany({ where: { projectId, assigneeId: targetId, status: 'COMPLETED' }, data: { assigneeId: null } });
       await tx.projectMember.delete({ where: { projectId_userId: { projectId, userId: targetId } } });
       return { removedUserId: targetId, clearedCompletedAssignments: cleared.count };

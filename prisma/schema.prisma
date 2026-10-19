@@ -56,6 +56,8 @@ model User {
   requests    JoinRequest[] @relation("Applicant")
   reviews     JoinRequest[] @relation("Reviewer")
   createdTasks Task[] @relation("TaskCreator")
+  contributions TaskCompletion[] @relation("Contributor")
+  recordedCompletions TaskCompletion[] @relation("CompletionRecorder")
 }
 
 model Project {
@@ -140,9 +142,24 @@ model Task {
   subtasks     Task[] @relation("Subtasks")
   assignee     ProjectMember? @relation("Assignment", fields: [projectId, assigneeId], references: [projectId, userId], onDelete: NoAction, onUpdate: NoAction)
   createdBy    User @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  completions  TaskCompletion[]
   @@unique([projectId, id])
   @@index([projectId, status, createdAt])
   @@index([projectId, priority, createdAt])
   @@index([projectId, assigneeId])
   @@index([projectId, parentTaskId])
+}
+
+// Immutable via the API: current assignments may be cleared, history is retained.
+model TaskCompletion {
+  id           String @id @default(uuid()) @db.Uuid
+  taskId       String @db.Uuid
+  contributorId String? @db.Uuid
+  recordedById String? @db.Uuid
+  completedAt  DateTime @db.Timestamptz(3)
+  task         Task @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  contributor  User? @relation("Contributor", fields: [contributorId], references: [id], onDelete: Restrict)
+  recordedBy   User? @relation("CompletionRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+  @@index([taskId, completedAt])
+  @@index([contributorId])
 }

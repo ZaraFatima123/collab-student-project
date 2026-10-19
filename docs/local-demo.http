@@ -1,0 +1,82 @@
+# Exact requests from the successful local demonstration.
+# Replays create new resources: use npm run demo to capture fresh IDs for a complete workflow.
+
+### A creates a discoverable project (observed HTTP 201)
+POST http://127.0.0.1:3000/api/projects
+X-Dev-User-Id: 00000000-0000-4000-8000-000000000001
+Content-Type: application/json
+
+{
+  "name": "Group 9 persistent local demo",
+  "visibility": "DISCOVERABLE",
+  "description": "Fictional demonstration data stored only on this computer."
+}
+
+### B requests to join (observed HTTP 201)
+POST http://127.0.0.1:3000/api/projects/60416386-a478-4997-a8aa-50eaa7d3083d/join-requests
+X-Dev-User-Id: 00000000-0000-4000-8000-000000000002
+Content-Type: application/json
+
+{
+  "message": "I can implement the task screen."
+}
+
+### A approves membership (observed HTTP 200)
+PATCH http://127.0.0.1:3000/api/projects/60416386-a478-4997-a8aa-50eaa7d3083d/join-requests/d55f8502-89c9-4c03-85ef-0263d87aea40
+X-Dev-User-Id: 00000000-0000-4000-8000-000000000001
+Content-Type: application/json
+
+{
+  "status": "APPROVED"
+}
+
+### A creates a task (observed HTTP 201)
+POST http://127.0.0.1:3000/api/projects/60416386-a478-4997-a8aa-50eaa7d3083d/tasks
+X-Dev-User-Id: 00000000-0000-4000-8000-000000000001
+Content-Type: application/json
+
+{
+  "title": "Build task screen",
+  "priority": "HIGH"
+}
+
+### A creates a subtask (observed HTTP 201)
+POST http://127.0.0.1:3000/api/projects/60416386-a478-4997-a8aa-50eaa7d3083d/tasks
+X-Dev-User-Id: 00000000-0000-4000-8000-000000000001
+Content-Type: application/json
+
+{
+  "title": "Design task status controls",
+  "parentTaskId": "5f3164de-d088-4519-a86d-b70af2a3d69b"
+}
+
+### A assigns the parent task to B (observed HTTP 200)
+PATCH http://127.0.0.1:3000/api/projects/60416386-a478-4997-a8aa-50eaa7d3083d/tasks/5f3164de-d088-4519-a86d-b70af2a3d69b/assignee
+X-Dev-User-Id: 00000000-0000-4000-8000-000000000001
+Content-Type: application/json
+
+{
+  "assigneeId": "00000000-0000-4000-8000-000000000002"
+}
+
+### B starts the assigned task (observed HTTP 200)
+PATCH http://127.0.0.1:3000/api/projects/60416386-a478-4997-a8aa-50eaa7d3083d/tasks/5f3164de-d088-4519-a86d-b70af2a3d69b/status
+X-Dev-User-Id: 00000000-0000-4000-8000-000000000002
+Content-Type: application/json
+
+{
+  "status": "IN_PROGRESS"
+}
+
+### B completes the assigned task (observed HTTP 200)
+PATCH http://127.0.0.1:3000/api/projects/60416386-a478-4997-a8aa-50eaa7d3083d/tasks/5f3164de-d088-4519-a86d-b70af2a3d69b/status
+X-Dev-User-Id: 00000000-0000-4000-8000-000000000002
+Content-Type: application/json
+
+{
+  "status": "COMPLETED"
+}
+
+### A retrieves the summary (observed HTTP 200)
+GET http://127.0.0.1:3000/api/projects/60416386-a478-4997-a8aa-50eaa7d3083d/summary
+X-Dev-User-Id: 00000000-0000-4000-8000-000000000001

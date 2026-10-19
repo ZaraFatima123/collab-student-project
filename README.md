@@ -8,7 +8,7 @@ This phase implements projects, membership, invitations, join requests, tasks/su
 
 ```powershell
 npm ci
-Copy-Item .env.example .env
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 docker compose up -d --wait db
 npm run db:generate
 npm run db:migrate
@@ -16,7 +16,9 @@ npm run db:seed
 npm run dev
 ```
 
-On macOS/Linux, use `cp .env.example .env`. If npm 11 reports blocked lifecycle scripts, approve the installed pinned Prisma, Prisma engines, esbuild and platform-specific embedded-postgres packages using your npm script-approval settings, then run `npm run db:generate`. The application itself does not need the embedded test binaries.
+On macOS/Linux, use `test -e .env || cp .env.example .env` to preserve existing configuration. If npm 11 reports blocked lifecycle scripts, approve the installed pinned Prisma, Prisma engines, esbuild and platform-specific embedded-postgres packages using your npm script-approval settings, then run `npm run db:generate`. The application itself does not need the embedded binaries when using Docker/system PostgreSQL.
+
+**No Docker or system PostgreSQL?** Use `npm run db:local:start` before the generate/migrate/seed/start commands. This free persistent setup uses the already-installed PostgreSQL 17.6 binaries, stores development data under `.local-postgres/data`, and listens on `127.0.0.1:55432` with database `group9_dev`. It creates `.env` only if absent; an existing file is never overwritten. Use `npm run db:local:stop` to stop the database without deleting data, and `npm run db:local:status` to inspect it. This is separate from the disposable test runner at port 55439. See [the local runbook](docs/local-run.md) for the live demonstration, exact requests, stopping the current background backend and verification results.
 
 The server binds to loopback `127.0.0.1`. Open **http://localhost:3000/api/docs** for Swagger UI; **http://localhost:3000/api/openapi.json** serves OpenAPI 3.1. A checked-in copy is [docs/openapi.json](docs/openapi.json). Regenerate it with `npm run docs:export` after API changes. Health/readiness: `GET /api/health` checks the database.
 
@@ -85,7 +87,7 @@ All checks run on the backend. An invitation alone does not grant access.
 
 Archived projects remain readable but **every project mutation is blocked**, including invitation responses and join cancellation. Archiving is permanent in this phase. Completed projects reject task changes until OWNER/LEAD changes project status to ACTIVE. Membership and invitation administration remain permitted on completed projects; new join requests require ACTIVE status. Completing a project does not require all tasks to be completed.
 
-Removal/leave conflicts if **any** assigned task is not COMPLETED, including subtasks. Managers must explicitly reassign or unassign such tasks first. Completed assignments are cleared as part of departure to preserve the current-membership foreign key; the departure response reports `clearedCompletedAssignments`. Completed task records and completion timestamps remain. This phase has no historical assignment audit log. This membership cleanup is allowed on completed projects; archived projects remain immutable.
+Removal/leave conflicts if **any** assigned task is not COMPLETED, including subtasks. Managers must explicitly reassign or unassign such tasks first. Completed current assignments are cleared as part of departure to preserve the current-membership foreign key; the departure response reports `clearedCompletedAssignments`. Historical contribution attribution is retained in immutable-via-API `TaskCompletion` records tied to User, independently of membership. Each completion snapshots the assignee (`contributorId`), status-change actor (`recordedById`) and time. Task responses expose `completions`; reopening and reassignment do not erase them, and repeated COMPLETED requests do not duplicate an event. This is completion history, not a full assignment-change audit log. This membership cleanup is allowed on completed projects; archived projects remain immutable.
 
 ## API routes
 
@@ -136,6 +138,8 @@ erDiagram
   ProjectMember o|--o{ Task : assigned
   User ||--o{ Task : creates
   Task o|--o{ Task : parent_of
+  Task ||--o{ TaskCompletion : completion_history
+  User o|--o{ TaskCompletion : contributor_or_recorder
 ```
 
 UUID primary keys, foreign keys, indexes and timezone-aware timestamps are defined in `prisma/schema.prisma`. Composite foreign keys enforce that assignees are current project members and parents belong to the task's project. SQL CHECK constraints enforce project date ranges, no self-parent, and completedAt/status consistency. Partial unique indexes enforce one OWNER and one PENDING invitation/request per project/user pair. Longer task cycles are checked in the service while holding the project lock.
@@ -145,6 +149,8 @@ Every project mutation acquires its project's PostgreSQL row lock inside a Read 
 Membership creation and pending-record resolution are atomic: a valid pending invitation becomes ACCEPTED; expired pending invitations become REVOKED; pending join requests become APPROVED with reviewer/time. For invitation acceptance, reviewedById is the invited user completing that membership action. Repeated/concurrent responses return 409 after the first success. Invitations expire after seven days by default. Expired PENDING records cannot be accepted; creation of a replacement revokes expired pending invitations before inserting the new one. Expiry is checked at response time, so a background worker is unnecessary. Invitation lists retain historical statuses and `expiresAt` so the frontend can label expired PENDING records.
 
 Use ISO 8601 timestamps with `Z` or an explicit offset (for example `2026-11-01T09:00:00+05:30`). Date-only and timezone-less inputs are rejected. PostgreSQL stores instants as `timestamptz(3)`; API timestamps are UTC. Due dates are exact instants, not automatic local end-of-day deadlines. Nullable dates/assignee/parent can be cleared using JSON `null`. Project dueDate cannot precede startDate, including when only one date is patched.
+
+The third migration backfills a completion event for each existing completed task, preserving its available assignee/time. The original status-change actor is unknown and remains null. Attribution already erased by a departure before this upgrade cannot be reconstructed. Unassigned completions have a null contributor. Completion history records the assignee at completion, not independently verified authorship, and does not alter progress totals or current-member workload.
 
 Task status changes set completedAt on first completion, preserve it on repeated completion, and clear it when status leaves COMPLETED. All four statuses can transition to one another; there is no dependency workflow in this phase. Parents and subtasks progress independently. Every task and subtask counts **once** in summary totals. Open means anything except COMPLETED. Completion percentage is completed / total × 100, rounded to two decimals; an empty project is 0%. Overdue means open with dueDate earlier than countedAt. Workload includes every current member, including zero-work members, and `unassignedOpenTasks` is separate. The summary currently loads task status/assignee/date rows in memory, appropriate for student-scale projects; aggregation can move into SQL if datasets grow.
 
@@ -177,6 +183,9 @@ curl -fsS -X PATCH "$BASE/projects/$PROJECT/join-requests/$JOIN" \
 TASK=$(curl -fsS "$BASE/projects/$PROJECT/tasks" \
   -H "X-Dev-User-Id: $A" -H 'Content-Type: application/json' \
   -d '{"title":"Build task list UI","priority":"HIGH"}' | jq -r '.data.id')
+SUBTASK=$(curl -fsS "$BASE/projects/$PROJECT/tasks" \
+  -H "X-Dev-User-Id: $A" -H 'Content-Type: application/json' \
+  -d "{\"title\":\"Design status controls\",\"parentTaskId\":\"$TASK\"}" | jq -r '.data.id')
 curl -fsS -X PATCH "$BASE/projects/$PROJECT/tasks/$TASK/assignee" \
   -H "X-Dev-User-Id: $A" -H 'Content-Type: application/json' \
   -d "{\"assigneeId\":\"$B\"}"
@@ -189,7 +198,7 @@ curl -fsS -X PATCH "$BASE/projects/$PROJECT/tasks/$TASK/status" \
   -H "X-Dev-User-Id: $B" -H 'Content-Type: application/json' \
   -d '{"status":"COMPLETED"}'
 
-# A views progress: totalTasks=1, COMPLETED=1, completionPercentage=100.
+# A views progress: totalTasks=2, COMPLETED=1, completionPercentage=50.
 curl -fsS "$BASE/projects/$PROJECT/summary" -H "X-Dev-User-Id: $A"
 ```
 
@@ -228,7 +237,7 @@ npm run test:embedded
 
 This starts the pinned embedded PostgreSQL 17.6 binaries on loopback port **55439**, creates a unique temporary workspace directory and test database, runs migrations plus the entire suite, stops PostgreSQL and removes its temporary data. Port 55439 must be free. It does not install a system service or create an OS user. PostgreSQL binaries may require local execution permission; on Linux run as an ordinary user (PostgreSQL refuses root). The optional embedded runner is development tooling only.
 
-Coverage includes atomic project/OWNER creation, strict input, development identity, discovery privacy, role escalation, invitation wrong-user/expiry/duplicate cases, concurrent acceptance/approval, nested resource scope, database FKs/CHECKs, cyclic subtasks (including concurrency), assignment/departure races, completed/archive restrictions, completion timestamps, pagination/filtering, and exact summary/workload calculations. See [docs/verification.md](docs/verification.md) for checks actually executed in this workspace.
+Coverage includes atomic project/OWNER creation, strict input, development identity, discovery privacy, role escalation, invitation wrong-user/expiry/duplicate cases, concurrent acceptance/approval, nested resource scope, database FKs/CHECKs, cyclic subtasks (including concurrency), assignment/departure races, completed/archive restrictions, completion history across departure/reassignment/reopening, migration backfill from the original schema, pagination/filtering, and exact summary/workload calculations. See [the local runbook](docs/local-run.md) for current checks, [the baseline verification record](docs/verification.md) for the original commit, and [the dependency audit review](docs/audit-review.md) for the remaining findings.
 
 ## Code map and version references
 

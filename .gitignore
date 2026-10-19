@@ -3,5 +3,8 @@ dist/
 .env
 .env.test
 .test-postgres*/
+.test-migrations*/
 coverage/
 *.log
+.local-postgres/
+.local-backend.json

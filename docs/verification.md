@@ -1,5 +1,7 @@
 # Verification record
 
+This is the historical record for baseline commit `c1df042`. See [the local runbook](local-run.md) for the later persistent development setup, live demonstration and contribution-history preservation, and [the updated audit review](audit-review.md).
+
 Executed on 15 October 2026 in this Windows workspace with Node.js 24.19.0, npm 11.17.0, Prisma CLI/Client 6.19.3 and embedded PostgreSQL 17.6.
 
 | Check | Result |

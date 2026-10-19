@@ -208,7 +208,7 @@ test('unfinished assignments block departure/removal; explicit unassignment perm
   await api('get',`/api/projects/${pid}`,B).expect(403);
 });
 
-test('completed assignment cleanup is explicit in departure response', async () => {
+test('departure clears current completed assignment but preserves contributor history', async () => {
   const pid = await project(); await inviteMember(pid);
   const t = await task(pid,{assigneeId:B});
   await api('patch',`/api/projects/${pid}/tasks/${t.id}/status`,B,{status:'COMPLETED'}).expect(200);
@@ -216,6 +216,34 @@ test('completed assignment cleanup is explicit in departure response', async () 
   assert.equal(departed.body.data.clearedCompletedAssignments,1);
   const stored = await db.task.findUniqueOrThrow({where:{id:t.id}});
   assert.equal(stored.assigneeId,null); assert.equal(stored.status,'COMPLETED');
+  const historical = (await api('get',`/api/projects/${pid}/tasks/${t.id}`,A).expect(200)).body.data;
+  assert.equal(historical.completions.length,1);
+  assert.equal(historical.completions[0].contributorId,B);
+  assert.equal(historical.completions[0].recordedById,B);
+  assert.equal(historical.completions[0].completedAt,historical.completedAt);
+  await api('get',`/api/projects/${pid}/tasks/${t.id}`,B).expect(403);
+});
+
+test('completion history survives removal, reassignment and reopening without duplicate events', async () => {
+  const pid = await project(); await inviteMember(pid,B); await inviteMember(pid,C);
+  const t = await task(pid,{assigneeId:B});
+  const completed = (await api('patch',`/api/projects/${pid}/tasks/${t.id}/status`,A,{status:'COMPLETED'}).expect(200)).body.data;
+  assert.equal(completed.completions[0].contributorId,B);
+  assert.equal(completed.completions[0].recordedById,A);
+  const again = (await api('patch',`/api/projects/${pid}/tasks/${t.id}/status`,A,{status:'COMPLETED'}).expect(200)).body.data;
+  assert.equal(again.completions.length,1);
+  await api('patch',`/api/projects/${pid}/tasks/${t.id}/assignee`,A,{assigneeId:C}).expect(200);
+  await api('delete',`/api/projects/${pid}/members/${B}`,A).expect(200);
+  const reopened = (await api('patch',`/api/projects/${pid}/tasks/${t.id}/status`,A,{status:'IN_PROGRESS'}).expect(200)).body.data;
+  assert.equal(reopened.completedAt,null);
+  assert.deepEqual(reopened.completions,completed.completions);
+  const recompleted = (await api('patch',`/api/projects/${pid}/tasks/${t.id}/status`,C,{status:'COMPLETED'}).expect(200)).body.data;
+  assert.equal(recompleted.completions.length,2);
+  assert.equal(recompleted.completions[1].contributorId,C);
+  assert.equal(recompleted.completions[1].recordedById,C);
+  await api('patch',`/api/projects/${pid}/tasks/${t.id}`,A,{completions:[]}).expect(400);
+  const listing = (await api('get',`/api/projects/${pid}/tasks`,A).expect(200)).body.data;
+  assert.deepEqual(listing[0].completions,recompleted.completions);
 });
 
 test('concurrent assignment and departure cannot leave an assignment to a nonmember', async () => {

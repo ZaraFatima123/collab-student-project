@@ -22,12 +22,12 @@ try {
   try { await client.query('CREATE DATABASE group9_test'); }
   finally { await client.end(); }
   const env = { ...process.env, TEST_DATABASE_URL: `postgresql://group9:test_only@127.0.0.1:${port}/group9_test?schema=public` };
-  const child = spawn(process.execPath, ['--import', 'tsx', '--test', '--test-concurrency=1', 'tests/config.test.ts', 'tests/integration.test.ts'], { env, stdio: 'inherit' });
+  const child = spawn(process.execPath, ['--import', 'tsx', '--test', '--test-concurrency=1', 'tests/config.test.ts', 'tests/integration.test.ts', 'tests/migration.test.ts'], { env, stdio: 'inherit' });
   process.exitCode = await new Promise((resolveExit, reject) => { child.once('error', reject); child.once('exit', code => resolveExit(code ?? 1)); });
 } finally {
   if (started) await execute(pg_ctl, ['stop', '-D', databaseDir, '-m', 'fast', '-w', '-t', '20'], { windowsHide: true, timeout: 30000 });
   // Verify the resolved temporary directory before recursive removal on Windows.
   const target = resolve(databaseDir);
   if (!target.startsWith(resolve('.') + '\\' + '.test-postgres-') && !target.startsWith(resolve('.') + '/' + '.test-postgres-')) throw new Error('Unexpected temporary database path');
-  await rm(target, { recursive: true, force: true });
+  await rm(target, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 }
